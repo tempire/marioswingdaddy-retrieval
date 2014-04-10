@@ -9,6 +9,8 @@ use feature 'current_sub';
 
 my $ua = Mojo::UserAgent->new;
 Mojo::IOLoop->delay(
+
+  # Login, get available lessons
   sub {
     my $delay = shift;
     $ua->post(
@@ -27,6 +29,7 @@ Mojo::IOLoop->delay(
     $ua->get("http://www.marioswingdaddy.com/online-lessons-signup/view-lessons/" => $delay->begin);
   },
 
+  # Format URLs
   sub {
     my ($delay, $tx) = @_;
     $delay->pass(
@@ -38,6 +41,7 @@ Mojo::IOLoop->delay(
     );
   },
 
+  # Build txns
   sub {
     my $delay = shift;
     my $urls = shift;
@@ -61,6 +65,7 @@ Mojo::IOLoop->delay(
     $delay->pass(@txns);
   },
 
+  # Begin txns
   sub {
     my ($delay, @txns) = @_;
 
@@ -72,6 +77,7 @@ Mojo::IOLoop->delay(
     }
   },
 
+  # Save downloaded files
   sub {
     my ($delay, @txns) = @_;
     for (@txns) {
