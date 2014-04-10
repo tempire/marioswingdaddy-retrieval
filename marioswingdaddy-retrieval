@@ -1,0 +1,85 @@
+#!/usr/bin/env perl
+use Modern::Perl;
+use Mojo::UserAgent;
+use Data::Dumper;
+use Devel::Dwarn;
+use IO::All;
+use List::MoreUtils 'uniq';
+use feature 'current_sub';
+
+my $ua = Mojo::UserAgent->new;
+Mojo::IOLoop->delay(
+  sub {
+    my $delay = shift;
+    $ua->post(
+      "http://www.marioswingdaddy.com/wp-login.php" => {} => form => {
+        log           => shift @ARGV,
+        pwd           => shift @ARGV,
+        rememberme    => 'forever',
+        'wp-submit'   => 'submit',
+        'redirect-to' => 'http://www.marioswingdaddy.com/online-lessons-signup/view-lessons/',
+      } => $delay->begin
+    );
+  },
+  sub {
+    my ($delay, $tx) = @_;
+
+    $ua->get("http://www.marioswingdaddy.com/online-lessons-signup/view-lessons/" => $delay->begin);
+  },
+
+  sub {
+    my ($delay, $tx) = @_;
+    $delay->pass(
+      $tx->res->dom('object param[name="flashvars"]')->map(
+        sub {
+          return Mojo::URL->new($_->attr('value') =~ /hd\.file=(?<movie_url>.+?)&/);
+        }
+      )
+    );
+  },
+
+  sub {
+    my $delay = shift;
+    my $urls = shift;
+    my @txns;
+
+    my $count = 0;
+
+    for my $url (uniq @$urls) {
+      next if ++$count > 2;
+
+      if (io(my $file = $url->path->parts->[-1])->exists) {
+        say "$file already downloaded";
+      }
+      else {
+        my $tx = $ua->build_tx(GET => $url);
+        $tx->res->max_message_size(0);
+        push @txns => $tx;
+      }
+    }
+
+    $delay->pass(@txns);
+  },
+
+  sub {
+    my ($delay, @txns) = @_;
+
+    say "No new videos to download" and exit if not @txns;
+
+    for my $tx (@txns) {
+      say 'Downloading ' . $tx->req->url;
+      $tx = $ua->start($tx => $delay->begin);
+    }
+  },
+
+  sub {
+    my ($delay, @txns) = @_;
+    for (@txns) {
+      my $file = $_->req->url->path->parts->[-1];
+      $_->req->content->asset->move_to($file);
+      say "Finished " . $_->req->url;
+    }
+  }
+);
+
+Mojo::IOLoop->start;
